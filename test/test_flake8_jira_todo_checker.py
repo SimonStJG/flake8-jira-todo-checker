@@ -9,15 +9,6 @@ from flake8.main.application import Application
 from flake8_jira_todo_checker import Checker
 
 
-class _TestFileChecker(FileChecker):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.reports = []
-
-    def report(self, error_code, line_number, column, text):
-        self.reports.append((error_code, line_number, column, text))
-
-
 def _strip_indent(s: str):
     lines = s.splitlines(keepends=True)
     indent = None
@@ -37,6 +28,15 @@ def _strip_indent(s: str):
     return "".join(result_lines)
 
 
+class _TestFileChecker(FileChecker):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.reports = []
+
+    def report(self, error_code, line_number, column, text):
+        self.reports.append((error_code, line_number, column, text))
+
+
 @pytest.fixture(scope="session")
 def default_flake8_options():
     app = Application()
@@ -47,14 +47,13 @@ def default_flake8_options():
 @pytest.fixture(scope="session")
 def checker(default_flake8_options):
     def factory(code, jira_project_ids):
-        Checker.parse_options(argparse.Namespace(jira_project_ids=jira_project_ids))
+        Checker.parse_options(argparse.Namespace(jira_project_ids=jira_project_ids, todo_synonyms=["FIX", "TODO"]))
 
-        with NamedTemporaryFile(
-            mode="w", suffix=".py", encoding="utf8", delete=False
-        ) as f:
+        with NamedTemporaryFile(mode="w", suffix=".py", encoding="utf8", delete=False) as f:
             f.write(_strip_indent(code))
 
         try:
+            # This is all very silly, but I'm not sure the best way to hook into flake8
             flake8 = _TestFileChecker(
                 f.name,
                 checks={
@@ -76,49 +75,81 @@ def checker(default_flake8_options):
     return factory
 
 
-def test_plain_todo(checker):
-    code = """
-        def main():
-            # TODO!
-            pass
-    """
-    assert checker(code, []) == [
-        (None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO!")
-    ]
-
-
-def test_jira_ids(checker):
-    code = """
-        def main():
-            # TODO ABC-123
-            pass
-    """
-    assert checker(code, ["ABC"]) == []
-
-
-def test_missing_ids(checker):
-    code = """
-        def main():
-            # TODO DEF-123
-            pass
-    """
-    assert checker(code, ["ABC"]) == [
-        (None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-123")
-    ]
-
-
-def test_multiline(checker):
-    code = """
-        def main():
-            # TODO DEF-123  FIXME
-            pass
-    """
-    assert checker(code, ["ABC"]) == [
-        (
-            None,
-            2,
-            6,
-            "JIR001 TODO with missing or invalid JIRA card: TODO DEF-123  FIXME",
+@pytest.mark.parametrize(
+    "code,jira_project_ids,expected_errors",
+    [
+        pytest.param(
+            """
+            def main():
+                # TODO!
+                pass
+            """,
+            [],
+            [(None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO!")],
+            id="plain todo",
         ),
-        (None, 2, 20, "JIR001 TODO with missing or invalid JIRA card: FIXME"),
-    ]
+        pytest.param(
+            """
+            def main():
+                # TODO ABC-123
+                pass
+            """,
+            ["ABC"],
+            [],
+            id="valid project id",
+        ),
+        pytest.param(
+            """
+            def main():
+                # TODO DEF-123
+                pass
+            """,
+            ["ABC"],
+            [(None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-123")],
+            id="invalid project id",
+        ),
+        pytest.param(
+            """
+            def main():
+                # TODO DEF-123  FIXME
+                pass
+            """,
+            ["ABC"],
+            [
+                (None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-123  FIXME"),
+                (None, 2, 20, "JIR001 TODO with missing or invalid JIRA card: FIXME"),
+            ],
+            id="multiple TODOs on one line",
+        ),
+        pytest.param(
+            """
+            def main():
+                # TODO DEF-123
+                # TODO DEF-456
+                pass
+            """,
+            ["ABC"],
+            [
+                (None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-123"),
+                (None, 3, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-456"),
+            ],
+            id="multiple TODOs on multiple lines",
+        ),
+        pytest.param(
+            """
+            def main():
+                # todo DEF-123
+                # Fix DEF-456
+                pass
+            """,
+            ["ABC"],
+            [
+                (None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: todo DEF-123"),
+                (None, 3, 6, "JIR001 TODO with missing or invalid JIRA card: Fix DEF-456"),
+            ],
+            id="case insensitive",
+        ),
+    ],
+)
+def test(checker, code, jira_project_ids, expected_errors):
+    assert checker(code, jira_project_ids) == expected_errors

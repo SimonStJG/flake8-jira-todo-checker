@@ -1,6 +1,6 @@
 [flake8]
 # See https://black.readthedocs.io/en/stable/compatible_configs.html#id1
-max-line-length = 88
+max-line-length = 120
 extend-ignore =
     E203
     W503

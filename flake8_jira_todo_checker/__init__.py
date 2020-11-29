@@ -20,13 +20,21 @@ class Checker:
             action="store",
             parse_from_config=True,
             comma_separated_list=True,
-            help=("Valid JIRA project IDs, e.g. ABC"),
+            help="Valid JIRA project IDs, e.g. ABC",
+        )
+        parser.add_option(
+            "--todo-synonyms",
+            action="store",
+            parse_from_config=True,
+            comma_separated_list=True,
+            default=["TODO", "FIXME", "QQ"],
+            help="Words which will be treated like a TODO",
         )
 
     @classmethod
     def parse_options(cls, options):
         cls.jira_project_ids = options.jira_project_ids
-        cls.todo_pattern = _construct_todo_pattern(options.jira_project_ids)
+        cls.todo_pattern = _construct_todo_pattern(options.jira_project_ids, options.todo_synonyms)
 
     def run(self):
         for line_number, line in enumerate(self.lines, start=1):
@@ -61,8 +69,11 @@ def _format_error(line, line_number, start_of_match):
     )
 
 
-def _construct_todo_pattern(jira_project_ids):
-    todo_like = r"todo|fix|fixme|qq"
+def _construct_todo_pattern(jira_project_ids, todo_synonyms):
+    if not todo_synonyms:
+        raise ValueError("You must provide at least one value for todo-synonyms")
+
+    todo_like = "|".join(todo_synonyms)
     if jira_project_ids:
         return re.compile(
             rf"""
