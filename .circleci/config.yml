@@ -1,0 +1,42 @@
+version: 2.1
+
+orbs:
+  python: circleci/python@0.2.1
+
+jobs:
+  py36:
+    docker:
+      - image: cimg/python:3.6
+    steps:
+      - checkout
+      - run:
+          command: pip install tox
+      - run:
+          command: tox -e py36
+
+  py37:
+    docker:
+      - image: cimg/python:3.7
+    steps:
+      - checkout
+      - run:
+          command: pip install tox
+      - run:
+          command: tox -e py37
+
+  py38:
+    docker:
+      - image: cimg/python:3.8
+    steps:
+      - checkout
+      - run:
+          command: pip install tox
+      - run:
+          command: tox -e py38,lint
+
+workflows:
+  main:
+    jobs:
+      - py36
+      - py37
+      - py38

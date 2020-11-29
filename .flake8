@@ -1,0 +1,7 @@
+[flake8]
+# See https://black.readthedocs.io/en/stable/compatible_configs.html#id1
+max-line-length = 88
+extend-ignore =
+    E203
+    W503
+    JIR001  # I'm not sure why this is picked up when we run via tox - since I'm not installing the plugin - but it is
