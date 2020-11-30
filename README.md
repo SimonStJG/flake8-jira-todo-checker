@@ -45,3 +45,9 @@ A list of words which will be treated like TODO can be provided via the flag `--
 ```
 todo-synonyms = TODO,FIX,QQ
 ```
+
+## Releasing
+
+1. `poetry run bump2version minor`
+1. `git push && git push --tags`
+1. `tox -e pypi`
