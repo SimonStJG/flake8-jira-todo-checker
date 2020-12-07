@@ -4,4 +4,6 @@ max-line-length = 120
 extend-ignore =
     E203
     W503
-    JIR001  # I'm not sure why this is picked up when we run via tox - since I'm not installing the plugin - but it is
+    # I'm not sure why this is picked up when we run via tox - since I'm not installing the plugin
+    JIR001
+    JIR004
