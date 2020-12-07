@@ -1,12 +1,9 @@
-import argparse
 import os
+import subprocess
+from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 
 import pytest
-from flake8.checker import FileChecker
-from flake8.main.application import Application
-
-from flake8_jira_todo_checker import Checker
 
 
 def _strip_indent(s: str):
@@ -28,55 +25,38 @@ def _strip_indent(s: str):
     return "".join(result_lines)
 
 
-class _TestFileChecker(FileChecker):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.reports = []
-
-    def report(self, error_code, line_number, column, text):
-        self.reports.append((error_code, line_number, column, text))
-
-
-@pytest.fixture(scope="session")
-def default_flake8_options():
-    app = Application()
-    app.initialize([])
-    return app.options
+@contextmanager
+def as_temporary_file(text, suffix):
+    try:
+        with NamedTemporaryFile(mode="w", suffix=suffix, encoding="utf8", delete=False) as f:
+            f.write(_strip_indent(text))
+        yield f.name
+    finally:
+        os.unlink(f.name)
 
 
-@pytest.fixture(scope="session")
-def checker(default_flake8_options):
-    def factory(code, jira_project_ids):
-        Checker.parse_options(argparse.Namespace(jira_project_ids=jira_project_ids, todo_synonyms=["FIX", "TODO"]))
-
-        with NamedTemporaryFile(mode="w", suffix=".py", encoding="utf8", delete=False) as f:
-            f.write(_strip_indent(code))
-
-        try:
-            # This is all very silly, but I'm not sure the best way to hook into flake8
-            flake8 = _TestFileChecker(
-                f.name,
-                checks={
-                    "ast_plugins": [
-                        {
-                            "parameters": {"tree": True, "lines": True},
-                            "plugin": Checker,
-                            "name": Checker.name,
-                        }
-                    ]
-                },
-                options=default_flake8_options,
+def run_flake8(config, code):
+    with as_temporary_file(code, ".py") as code_file:
+        with as_temporary_file(config, ".ini") as config_file:
+            proc = subprocess.run(
+                ["flake8", "--config", config_file, code_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
-            flake8.run_ast_checks()
-            return flake8.reports
-        finally:
-            os.unlink(f.name)
+            stderr = proc.stderr.decode("utf8").strip()
+            if stderr:
+                raise ValueError(f"Error while running flake8: {stderr}")
+            for line in proc.stdout.decode("utf8").splitlines():
+                yield line.split(":", maxsplit=1)[1]
 
-    return factory
+
+standard_config = """
+[flake8]
+todo-synonyms = TODO,FIX,QQ
+jira-project-ids = ABC
+"""
 
 
 @pytest.mark.parametrize(
-    "code,jira_project_ids,expected_errors",
+    "code,config,expected_errors",
     [
         pytest.param(
             """
@@ -84,8 +64,8 @@ def checker(default_flake8_options):
                 # TODO!
                 pass
             """,
-            [],
-            [(None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO!")],
+            standard_config,
+            ["2:7: JIR001 TODO with missing or malformed JIRA card: TODO!"],
             id="plain todo",
         ),
         pytest.param(
@@ -94,7 +74,7 @@ def checker(default_flake8_options):
                 # TODO ABC-123
                 pass
             """,
-            ["ABC"],
+            standard_config,
             [],
             id="valid project id",
         ),
@@ -104,8 +84,8 @@ def checker(default_flake8_options):
                 # TODO DEF-123
                 pass
             """,
-            ["ABC"],
-            [(None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-123")],
+            standard_config,
+            ["2:7: JIR001 TODO with missing or malformed JIRA card: TODO DEF-123"],
             id="invalid project id",
         ),
         pytest.param(
@@ -114,10 +94,11 @@ def checker(default_flake8_options):
                 # TODO DEF-123  FIXME
                 pass
             """,
-            ["ABC"],
+            standard_config,
             [
-                (None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-123  FIXME"),
-                (None, 2, 20, "JIR001 TODO with missing or invalid JIRA card: FIXME"),
+                "2:7: JIR001 TODO with missing or malformed JIRA card: TODO DEF-123  FIXME",
+                "2:21: JIR004 Invalid word used instead of TODO: FIXME",
+                "2:21: JIR001 TODO with missing or malformed JIRA card: FIXME",
             ],
             id="multiple TODOs on one line",
         ),
@@ -128,10 +109,10 @@ def checker(default_flake8_options):
                 # TODO DEF-456
                 pass
             """,
-            ["ABC"],
+            standard_config,
             [
-                (None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-123"),
-                (None, 3, 6, "JIR001 TODO with missing or invalid JIRA card: TODO DEF-456"),
+                "2:7: JIR001 TODO with missing or malformed JIRA card: TODO DEF-123",
+                "3:7: JIR001 TODO with missing or malformed JIRA card: TODO DEF-456",
             ],
             id="multiple TODOs on multiple lines",
         ),
@@ -142,14 +123,16 @@ def checker(default_flake8_options):
                 # Fix DEF-456
                 pass
             """,
-            ["ABC"],
+            standard_config,
             [
-                (None, 2, 6, "JIR001 TODO with missing or invalid JIRA card: todo DEF-123"),
-                (None, 3, 6, "JIR001 TODO with missing or invalid JIRA card: Fix DEF-456"),
+                "2:7: JIR004 Invalid word used instead of TODO: todo DEF-123",
+                "2:7: JIR001 TODO with missing or malformed JIRA card: todo DEF-123",
+                "3:7: JIR004 Invalid word used instead of TODO: Fix DEF-456",
+                "3:7: JIR001 TODO with missing or malformed JIRA card: Fix DEF-456",
             ],
             id="case insensitive",
         ),
     ],
 )
-def test(checker, code, jira_project_ids, expected_errors):
-    assert checker(code, jira_project_ids) == expected_errors
+def test(code, config, expected_errors):
+    assert list(run_flake8(config, code)) == expected_errors
