@@ -45,8 +45,8 @@ class Checker:
             action="store",
             parse_from_config=True,
             comma_separated_list=True,
-            default=["FIX", "QQ"],
-            help="Disallowed words which will be treated like a TODO.  Defaults to FIX, QQ.",
+            default=["FIXME", "QQ"],
+            help="Disallowed words which will be treated like a TODO.  Defaults to FIXME, QQ.",
         )
         parser.add_option(
             "--disallowed-jira-statuses",
@@ -98,7 +98,7 @@ class Checker:
 
     def _process_match(self, line, line_number, match):
         logger.debug("Found match: %s on line %s", match.span(), line)
-        start_of_match = match.span()[0]
+        start_of_match = match.span(1)[0]
 
         todo_word = match.group(1)
         if todo_word not in self.allowed_todo_synonyms:
@@ -156,13 +156,17 @@ def _construct_todo_pattern(jira_project_ids, allowed_todo_synonyms, disallowed_
     if jira_project_ids:
         return re.compile(
             rf"""
+                [^a-z]                              # Not a character
+                                                    #   (We don't want to match words which end with a todo synonym)
                 ({todo_like})
                 (
-                    [ ]                                            # Single Whitespace
-                    ({"|".join(jira_project_ids)})                 # JIRA project ID
+                    [ ]                             # Single Whitespace
+                    ({"|".join(jira_project_ids)})  # JIRA project ID
                     -
-                    \d+                                            # JIRA card number
+                    \d+                             # JIRA card number
                 )?
+                [^a-z]                              # Not a character
+                                                    #   (We don't want to match words which start with a todo synonym)
             """,
             re.VERBOSE | re.IGNORECASE,
         )

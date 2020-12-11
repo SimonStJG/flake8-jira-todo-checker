@@ -20,7 +20,7 @@ def hacky_function():
     ...
 ```
 
-But this would raise the new flake8 error `JIR001`:
+However this would raise the new flake8 error `JIR001`:
 
 ```
 def hacky_function():
@@ -33,7 +33,7 @@ def hacky_function():
 ### jira-project-ids
 
 A list of valid JIRA project IDs can be provided via the flag `--jira-project-ids` or via the key `jira-project-ids`
-in a flake8 configuration file, e.g
+in a flake8 configuration file, e.g.
 
 ```
 jira-project-ids = ABC,DEF
@@ -53,7 +53,7 @@ error only if it's missing a JIRA card or that JIRA card is invalid.
 Defaults to:
 ```
 allowed-todo-synonyms = TODO
-disallowed-todo-synonyms = FIX,QQ
+disallowed-todo-synonyms = FIXME,QQ
 ```
 
 ### jira-server

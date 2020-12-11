@@ -50,7 +50,8 @@ def run_flake8(config, code):
 
 standard_config = """
 [flake8]
-todo-synonyms = TODO,FIX,QQ
+allowed-todo-synonyms = TODO
+disallowed-todo-synonyms=FIX,FIXME,QQ
 jira-project-ids = ABC
 """
 
@@ -131,6 +132,16 @@ jira-project-ids = ABC
                 "3:7: JIR001 TODO with missing or malformed JIRA card: Fix DEF-456",
             ],
             id="case insensitive",
+        ),
+        pytest.param(
+            """
+            def fixture():
+                # Suffix and Fixture are suspicious words
+                pass
+            """,
+            standard_config,
+            [],
+            id="Banned word as subset of legitimate word",
         ),
     ],
 )
