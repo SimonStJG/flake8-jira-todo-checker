@@ -7,6 +7,8 @@ from flake8_jira_todo_checker.version import __version__
 
 logger = logging.getLogger(__name__)
 
+_MAX_ERROR_DETAIL_LENGTH = 60
+
 
 @enum.unique
 class ErrorCode(str, enum.Enum):
@@ -136,8 +138,8 @@ class Checker:
 
 
 def _format_error(error_code, line, line_number, start_of_match):
-    detail = line.rstrip()[start_of_match : start_of_match + 20]
-    if len(line.rstrip()) > start_of_match + 20:
+    detail = line.rstrip()[start_of_match : start_of_match + _MAX_ERROR_DETAIL_LENGTH]
+    if len(line.rstrip()) > start_of_match + _MAX_ERROR_DETAIL_LENGTH:
         detail += "..."
     return (
         line_number,
