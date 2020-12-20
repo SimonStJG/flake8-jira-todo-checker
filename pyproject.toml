@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "flake8-jira-todo-checker"
 version = "0.4.0"
-description = "Flake8 plugin to check that every TODO, FIXME, QQ etc comment has a JIRA ID next to it."
+description = "Flake8 plugin to check that every TODO, FIXME, QQ etc comment has a valid JIRA ID next to it."
 readme = "README.md"
 homepage = "https://github.com/simonstjg/flake8-jira-todo-checker"
 repository = "https://github.com/simonstjg/flake8-jira-todo-checker"
