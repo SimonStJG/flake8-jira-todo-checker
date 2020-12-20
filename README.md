@@ -10,9 +10,9 @@ Flake8 JIRA TODO Checker
 Flake8 plugin to check that:
 
  1. Every `TODO`, `FIXME`, `QQ` etc comment has a JIRA ID next to it.  
- 2. Every JIRA ID refers to a JIRA card which is not closed.
+ 2. Every JIRA ID refers to a JIRA issue which is not closed.
 
-In other words, this is valid as long as the JIRA card ABC-123 is not closed:
+In other words, this is valid as long as the JIRA issue ABC-123 is not closed:
 
 ```
 def hacky_function():
@@ -20,13 +20,18 @@ def hacky_function():
     ...
 ```
 
-However this would raise the new flake8 error `JIR001`:
+However, none of these TODOs would be valid:
 
 ```
 def hacky_function():
-    # TODO Stop reticulating splines
+    # TODO No JIRA issue is attached here
+    # TODO ABC-9182 Not valid if this JIRA issue is resolved!
+    # TODO FIXME You can't use this word to denote a TODO
     ...
 ```
+
+You can choose to run this project without connectivity to JIRA, in which case it will only check that every TODO has
+an issue attached from the correct project.
 
 ## Configuration
 
@@ -97,11 +102,15 @@ For OAuth authentication, use the following configuration parameters:
 
 For kerberos authentication, set the `jira-kerberos` configuration parameter to True. 
 
-## Alternatives
+# Alternatives
 
 This project is heavily inspired by the [Softwire TODO checker](https://github.com/Softwire/todo-checker).
 
-## Releasing
+# Licence
+
+GNU General Public License v3 or later (GPLv3+)
+
+# Releasing
 
 1. `poetry run bump2version minor`
 1. `git push && git push --tags`
@@ -109,4 +118,4 @@ This project is heavily inspired by the [Softwire TODO checker](https://github.c
 
 # TODO
 
-Test and add instructions for JIRA cloud.
+Add instructions for authenticating with JIRA cloud.
