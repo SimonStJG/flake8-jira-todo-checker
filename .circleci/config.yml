@@ -32,7 +32,17 @@ jobs:
       - run:
           command: pip install tox
       - run:
-          command: tox -e py38,lint
+          command: tox -e py38
+
+  py39:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - checkout
+      - run:
+          command: pip install tox
+      - run:
+          command: tox -e py39,lint
 
 workflows:
   main:
@@ -40,3 +50,4 @@ workflows:
       - py36
       - py37
       - py38
+      - py39
