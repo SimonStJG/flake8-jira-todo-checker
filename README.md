@@ -9,8 +9,9 @@ Flake8 JIRA TODO Checker
 
 Flake8 plugin to check that:
 
- 1. Every `TODO`, `FIXME`, `QQ` etc comment has a JIRA ID next to it.  
+ 1. Every `TODO` comment has a JIRA ID next to it.  
  2. Every JIRA ID refers to a JIRA issue which is not closed.
+ 3. All "TODO" comments use the word "TODO" ("FIXME", "QQ", etc are not allowed).
 
 In other words, this is valid as long as the JIRA issue ABC-123 is not closed:
 
@@ -20,7 +21,7 @@ def hacky_function():
     ...
 ```
 
-However, none of these TODOs would be valid:
+However, none of these comments would be valid:
 
 ```
 def hacky_function():
