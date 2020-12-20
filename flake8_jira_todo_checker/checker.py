@@ -1,13 +1,21 @@
+import contextlib
 import enum
+import io
 import logging
 import re
+from collections import namedtuple
 
-from flake8_jira_todo_checker.jira_client import add_jira_client_options, jira_client_from_options
+from flake8_jira_todo_checker.jira_client import (
+    MAX_ISSUES_PER_JIRA_QUERY,
+    add_jira_client_options,
+    jira_client_from_options,
+)
 from flake8_jira_todo_checker.version import __version__
 
 logger = logging.getLogger(__name__)
 
 _MAX_ERROR_DETAIL_LENGTH = 60
+TodoDetail = namedtuple("ErrorDetail", ["todo_word", "jira_issue", "line", "line_number", "start_of_match"])
 
 
 @enum.unique
@@ -94,59 +102,93 @@ class Checker:
         cls.jira_client = jira_client_from_options(options)
 
     def run(self):
+        jira_issues_to_check_batch = []
+        for error, jira_issue_to_check in self._check_lines():
+            if error:
+                yield error
+            if jira_issue_to_check:
+                jira_issues_to_check_batch.append(jira_issue_to_check)
+            if len(jira_issues_to_check_batch) == MAX_ISSUES_PER_JIRA_QUERY:
+                yield from self._check_jira_issues(jira_issues_to_check_batch)
+                jira_issues_to_check_batch = []
+        yield from self._check_jira_issues(jira_issues_to_check_batch)
+
+    def _check_lines(self):
         for line_number, line in enumerate(self.lines, start=1):
             for match in self.todo_pattern.finditer(line):
-                yield from self._process_match(line, line_number, match)
+                logger.debug("Found match: %s on line %s", match.span(), line)
+                try:
+                    jira_issue_raw = match.group(2)
+                except IndexError:
+                    jira_issue = None
+                else:
+                    if jira_issue_raw:
+                        jira_issue = jira_issue_raw.strip().upper()
+                    else:
+                        jira_issue = None
 
-    def _process_match(self, line, line_number, match):
-        logger.debug("Found match: %s on line %s", match.span(), line)
-        start_of_match = match.span(1)[0]
+                todo_detail = TodoDetail(
+                    todo_word=match.group(1),
+                    jira_issue=jira_issue,
+                    line=line,
+                    line_number=line_number,
+                    start_of_match=match.span(1)[0],
+                )
+                logger.debug("todo_detail: %s", todo_detail)
 
-        todo_word = match.group(1)
-        if todo_word not in self.allowed_todo_synonyms:
-            yield _format_error(ErrorCode.JIR004, line, line_number, start_of_match)
+                if todo_detail.todo_word not in self.allowed_todo_synonyms:
+                    yield _format_error(ErrorCode.JIR004, todo_detail), None
 
-        if self.jira_project_ids:
-            jira_card_id = match.group(2)
-            if jira_card_id:
-                jira_card_id = jira_card_id.strip()
-                logger.debug("Found JIRA ID in match: %s", jira_card_id)
-                if self.jira_client:
-                    issue = self.jira_client.get_issue(jira_card_id)
-                    yield from self._check_issue_against_jira(issue, line, line_number, start_of_match)
-            else:
-                logger.debug("No JIRA ID found")
+                if self.jira_project_ids:
+                    if todo_detail.jira_issue:
+                        yield None, todo_detail
+                    else:
+                        yield _format_error(ErrorCode.JIR001, todo_detail), None
+                else:
+                    yield _format_error(ErrorCode.JIR001, todo_detail), None
 
-                yield _format_error(ErrorCode.JIR001, line, line_number, start_of_match)
-        else:
-            logger.debug("No JIRA project IDs set")
-            yield _format_error(ErrorCode.JIR001, line, line_number, start_of_match)
-
-    def _check_issue_against_jira(self, issue, line, line_number, start_of_match):
-        if not issue:
-            logger.debug("No such issue")
-            yield _format_error(ErrorCode.JIR002, line, line_number, start_of_match)
-        else:
-            status, resolution = issue
-            logger.debug("Found issue with status: %s and resolution: %s", status, resolution)
-            if status in self.disallowed_jira_statuses:
-                logger.debug("JIRA status is disallowed")
-                yield _format_error(ErrorCode.JIR003, line, line_number, start_of_match)
-            elif resolution and (self.disallow_all_jira_resolutions or resolution in self.disallowed_jira_resolutions):
-                logger.debug("JIRA resolution is disallowed")
-                yield _format_error(ErrorCode.JIR003, line, line_number, start_of_match)
+    def _check_jira_issues(self, jira_issues_to_check):
+        if jira_issues_to_check and self.jira_client:
+            existing_issues = self.jira_client.get_issues({detail.jira_issue for detail in jira_issues_to_check})
+            for todo_detail in jira_issues_to_check:
+                try:
+                    status, resolution = existing_issues[todo_detail.jira_issue]
+                except KeyError:
+                    logger.debug("No such issue")
+                    yield _format_error(ErrorCode.JIR002, todo_detail)
+                else:
+                    logger.debug("Found issue with status: %s and resolution: %s", status, resolution)
+                    if status in self.disallowed_jira_statuses:
+                        logger.debug("JIRA status is disallowed")
+                        yield _format_error(ErrorCode.JIR003, todo_detail, f"Status={status}")
+                    elif resolution and (
+                        self.disallow_all_jira_resolutions or resolution in self.disallowed_jira_resolutions
+                    ):
+                        logger.debug("JIRA resolution is disallowed")
+                        yield _format_error(ErrorCode.JIR003, todo_detail, f"Resolution={resolution}")
 
 
-def _format_error(error_code, line, line_number, start_of_match):
-    detail = line.rstrip()[start_of_match : start_of_match + _MAX_ERROR_DETAIL_LENGTH]
-    if len(line.rstrip()) > start_of_match + _MAX_ERROR_DETAIL_LENGTH:
-        detail += "..."
-    return (
-        line_number,
-        start_of_match,
-        f"{error_code.value}: {detail}",
-        type(Checker),
-    )
+def _format_error(error_code, todo_detail, extra_error_detail=None):
+    with contextlib.closing(io.StringIO()) as error_message:
+        error_message.write(error_code.value)
+        if extra_error_detail:
+            error_message.write(" (")
+            error_message.write(extra_error_detail)
+            error_message.write(")")
+        error_message.write(": ")
+        error_message.write(
+            todo_detail.line.rstrip()[
+                todo_detail.start_of_match : todo_detail.start_of_match + _MAX_ERROR_DETAIL_LENGTH
+            ]
+        )
+        if len(todo_detail.line.rstrip()) > todo_detail.start_of_match + _MAX_ERROR_DETAIL_LENGTH:
+            error_message.write("...")
+        return (
+            todo_detail.line_number,
+            todo_detail.start_of_match,
+            error_message.getvalue(),
+            type(Checker),
+        )
 
 
 def _construct_todo_pattern(jira_project_ids, allowed_todo_synonyms, disallowed_todo_synonyms):

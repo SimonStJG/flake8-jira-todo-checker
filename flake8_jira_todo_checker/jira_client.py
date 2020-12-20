@@ -4,26 +4,33 @@ from pathlib import Path
 import jira
 
 logger = logging.getLogger(__name__)
+MAX_ISSUES_PER_JIRA_QUERY = 100
 
 
 class JiraClient:
     def __init__(self, jira_client):
         self._jira_client = jira_client
 
-    def get_issue(self, issue_id):
-        try:
-            issue = self._jira_client.issue(issue_id, fields=["status", "resolution"])
-        except jira.JIRAError as e:
-            if e.status_code != 404:
-                raise
-            return None
+    def get_issues(self, issue_ids):
+        if len(issue_ids) > MAX_ISSUES_PER_JIRA_QUERY:
+            raise ValueError("Unable to query for more than 100 issues")
 
-        status = issue.fields.status.name
-        if issue.fields.resolution:
-            resolution = issue.fields.resolution.name
-        else:
-            resolution = None
-        return status, resolution
+        def unpack_resolution_and_name(issue):
+            status = issue.fields.status.name
+            if issue.fields.resolution:
+                resolution = issue.fields.resolution.name
+            else:
+                resolution = None
+            return status, resolution
+
+        return {
+            issue.key: unpack_resolution_and_name(issue)
+            # weirdly, this query will fail unless we pass the keys as lowercase
+            # https://community.atlassian.com/t5/Jira-questions/JQL-search-by-issueId-fails-if-issue-key-LIST-has-a-deleted/qaq-p/99570
+            for issue in self._jira_client.search_issues(
+                f'issuekey in ({",".join(issue.lower() for issue in issue_ids)})', maxResults=MAX_ISSUES_PER_JIRA_QUERY
+            )
+        }
 
 
 def add_jira_client_options(parser):
