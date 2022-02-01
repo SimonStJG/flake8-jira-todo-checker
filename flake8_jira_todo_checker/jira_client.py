@@ -1,5 +1,5 @@
 import logging
-from pathlib import Path
+import pathlib
 
 import jira
 
@@ -136,7 +136,7 @@ def jira_client_from_options(options):
             "access_token": jira_oauth_access_token,
             "access_token_secret": jira_oauth_access_token_secret,
             "consumer_key": jira_oauth_consumer_key,
-            "key_cert": Path(jira_oauth_key_cert_file).read_text(),
+            "key_cert": pathlib.Path(jira_oauth_key_cert_file).read_text(),
         }
     elif is_kerberos:
         kwargs["kerberos"] = True

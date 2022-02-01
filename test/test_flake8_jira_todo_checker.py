@@ -1,13 +1,13 @@
+import contextlib
 import io
 import os
 import sys
-from contextlib import contextmanager
-from tempfile import NamedTemporaryFile
+import tempfile
 
+import flake8.main.application
 import pytest
-from flake8.main import application
 
-from flake8_jira_todo_checker import Checker
+import flake8_jira_todo_checker
 
 
 def _strip_indent(s: str):
@@ -29,10 +29,10 @@ def _strip_indent(s: str):
     return "".join(result_lines)
 
 
-@contextmanager
+@contextlib.contextmanager
 def as_temporary_file(text, suffix):
     try:
-        with NamedTemporaryFile(mode="w", suffix=suffix, encoding="utf8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, encoding="utf8", delete=False) as f:
             f.write(_strip_indent(text))
         yield f.name
     finally:
@@ -47,7 +47,7 @@ def run_flake8(config, code):
                 actual_stderr = sys.stderr
                 sys.stdout = io.StringIO()
                 sys.stderr = io.StringIO()
-                app = application.Application()
+                app = flake8.main.application.Application()
                 app.run(["--config", config_file, code_file])
                 flake8_stdout = sys.stdout.getvalue()
                 flake8_stderr = sys.stderr.getvalue()
@@ -73,7 +73,9 @@ def mock_jira_client(mocker):
     def mock_jira_client_from_options(*args, **kwargs):
         return mock_client
 
-    mocker.patch(f"{Checker.__module__}.jira_client_from_options", mock_jira_client_from_options)
+    mocker.patch(
+        f"{flake8_jira_todo_checker.Checker.__module__}.jira_client_from_options", mock_jira_client_from_options
+    )
     return mock_client
 
 
