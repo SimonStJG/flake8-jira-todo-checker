@@ -1,9 +1,9 @@
+import collections
 import contextlib
 import enum
 import io
 import logging
 import re
-from collections import namedtuple
 
 from flake8_jira_todo_checker.jira_client import (
     MAX_ISSUES_PER_JIRA_QUERY,
@@ -15,7 +15,7 @@ from flake8_jira_todo_checker.version import __version__
 logger = logging.getLogger(__name__)
 
 _MAX_ERROR_DETAIL_LENGTH = 60
-TodoDetail = namedtuple("ErrorDetail", ["todo_word", "jira_issue", "line", "line_number", "start_of_match"])
+TodoDetail = collections.namedtuple("ErrorDetail", ["todo_word", "jira_issue", "line", "line_number", "start_of_match"])
 
 
 @enum.unique
