@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  python: circleci/python@0.2.1
+  python: circleci/python@1.5.0
 
 jobs:
   py36:
@@ -44,6 +44,17 @@ jobs:
       - run:
           command: tox -e py39,lint
 
+  py310:
+    docker:
+      - image: cimg/python:3.10
+    steps:
+      - checkout
+      - run:
+          command: pip install tox
+      - run:
+          command: tox -e py310
+
+
 workflows:
   main:
     jobs:
@@ -51,3 +62,4 @@ workflows:
       - py37
       - py38
       - py39
+      - py310
