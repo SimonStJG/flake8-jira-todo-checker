@@ -12,7 +12,7 @@ jobs:
       - run:
           command: pip install tox
       - run:
-          command: tox -e py36
+          command: tox -e py36--flake8-3,py36--flake8-4
 
   py37:
     docker:
@@ -22,7 +22,7 @@ jobs:
       - run:
           command: pip install tox
       - run:
-          command: tox -e py37
+          command: tox -e py37--flake8-3,py37--flake8-4
 
   py38:
     docker:
@@ -32,7 +32,7 @@ jobs:
       - run:
           command: pip install tox
       - run:
-          command: tox -e py38
+          command: tox -e py38--flake8-3,py38--flake8-4
 
   py39:
     docker:
@@ -42,7 +42,7 @@ jobs:
       - run:
           command: pip install tox
       - run:
-          command: tox -e py39,lint
+          command: tox -e py39--flake8-3,py39--flake8-4,lint
 
   py310:
     docker:
@@ -52,7 +52,7 @@ jobs:
       - run:
           command: pip install tox
       - run:
-          command: tox -e py310
+          command: tox -e py310--flake8-3,py310--flake8-4
 
 
 workflows:

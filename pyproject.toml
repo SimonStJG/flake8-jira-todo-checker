@@ -29,7 +29,7 @@ classifiers=[
 
 [tool.poetry.dependencies]
 python = "^3.6"
-flake8 = "^3"
+flake8 = ">=3"
 jira = "^2.0.0"
 
 [tool.poetry.dev-dependencies]

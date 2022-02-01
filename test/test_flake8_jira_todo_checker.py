@@ -45,12 +45,20 @@ def run_flake8(config, code):
             try:
                 actual_stdout = sys.stdout
                 actual_stderr = sys.stderr
-                sys.stdout = io.StringIO()
-                sys.stderr = io.StringIO()
+
+                # One of the flake8 maintainers "suggests" using TextIOWrapper when monkeypatching sys.stdout
+                # https://github.com/PyCQA/flake8/issues/1419
+                new_stdout_buffer = io.BytesIO()
+                sys.stdout = io.TextIOWrapper(new_stdout_buffer, write_through=True)
+
+                new_stderr_buffer = io.BytesIO()
+                sys.stderr = io.TextIOWrapper(new_stderr_buffer, write_through=True)
+
                 app = flake8.main.application.Application()
                 app.run(["--config", config_file, code_file])
-                flake8_stdout = sys.stdout.getvalue()
-                flake8_stderr = sys.stderr.getvalue()
+
+                flake8_stdout = new_stdout_buffer.getvalue().decode("utf-8")
+                flake8_stderr = new_stderr_buffer.getvalue().decode("utf-8")
             finally:
                 sys.stdout.close()
                 sys.stderr.close()
