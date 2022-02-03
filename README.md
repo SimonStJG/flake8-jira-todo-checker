@@ -82,7 +82,7 @@ disallow-all-jira-resolutions = True
 ### JIRA Authentication
 
 We support the same authentication methods as the 
-[jira-python](https://jira.readthedocs.io/en/master/examples.html#authentication) library.
+[jira-python](https://jira.readthedocs.io/examples.html#authentication) library.
 
 For cookie-based username/password authentication, use the following configuration parameters:
 
@@ -94,6 +94,9 @@ For HTTP Basic username/password authentication, use the following configuration
 1.  `jira-http-basic-username`
 1.  `jira-http-basic-password`
 
+For JIRA cloud set `jira-http-basic-username` to your email address and `jira-http-basic-password` to your 
+[API token](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
+
 For OAuth authentication, use the following configuration parameters:
 
 1.  `jira-oauth-access-token`
@@ -101,7 +104,7 @@ For OAuth authentication, use the following configuration parameters:
 1.  `jira-oauth-consumer-key`
 1.  `jira-oauth-key-cert-file`
 
-For kerberos authentication, set the `jira-kerberos` configuration parameter to True. 
+For kerberos authentication, set the `jira-kerberos` configuration parameter to True.
 
 # Alternatives
 
@@ -116,7 +119,3 @@ GNU General Public License v3 or later (GPLv3+)
 1. `poetry run bump2version minor`
 1. `git push && git push --tags`
 1. `tox -e pypi`
-
-# TODO
-
-Add instructions for authenticating with JIRA cloud.
