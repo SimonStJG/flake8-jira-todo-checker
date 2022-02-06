@@ -1,21 +1,21 @@
 import collections
-import contextlib
 import enum
-import io
 import logging
 import re
+import textwrap
 
 from flake8_jira_todo_checker.jira_client import (
-    MAX_ISSUES_PER_JIRA_QUERY,
+    _MAX_ISSUES_PER_JIRA_QUERY,
     add_jira_client_options,
     jira_client_from_options,
+    status_and_resolution,
 )
 from flake8_jira_todo_checker.version import __version__
 
 logger = logging.getLogger(__name__)
 
 _MAX_ERROR_DETAIL_LENGTH = 60
-TodoDetail = collections.namedtuple("ErrorDetail", ["todo_word", "jira_issue", "line", "line_number", "start_of_match"])
+TodoDetail = collections.namedtuple("TodoDetail", ["todo_word", "jira_issue", "line", "line_number", "start_of_match"])
 
 
 @enum.unique
@@ -30,8 +30,9 @@ class Checker:
     name = "flake8-jira-todo-checker"
     version = __version__
 
-    def __init__(self, tree, lines):
+    def __init__(self, tree, lines, filename):
         self.lines = lines
+        self.filename = filename
 
     @classmethod
     def add_options(cls, parser):
@@ -80,6 +81,18 @@ class Checker:
             "the same time as disallowed-jira-resolutions.",
             default=True,
         )
+        parser.add_option(
+            "--jira-update-comments",
+            action="store_true",
+            help="Ensure that comments on the JIRA ticket detailing TODOs are kept up to date.",
+            default=False,
+        )
+        parser.add_option(
+            "--jira-update-comments-dry-run",
+            action="store_true",
+            help="Don't make any updates to JIRA, but log what updates would have been made.",
+            default=False,
+        )
         add_jira_client_options(parser)
 
     @classmethod
@@ -101,6 +114,12 @@ class Checker:
 
         cls.jira_client = jira_client_from_options(options)
 
+        if options.jira_update_comments_dry_run and options.jira_update_comments:
+            raise ValueError("You cannot set both --jira-update-comments-dry-run and --jira-update-comments")
+
+        cls.update_comments = options.jira_update_comments
+        cls.update_comments_dry_run = options.jira_update_comments_dry_run
+
     def run(self):
         jira_issues_to_check_batch = []
         for error, jira_issue_to_check in self._check_lines():
@@ -108,7 +127,7 @@ class Checker:
                 yield error
             if jira_issue_to_check:
                 jira_issues_to_check_batch.append(jira_issue_to_check)
-            if len(jira_issues_to_check_batch) == MAX_ISSUES_PER_JIRA_QUERY:
+            if len(jira_issues_to_check_batch) == _MAX_ISSUES_PER_JIRA_QUERY:
                 yield from self._check_jira_issues(jira_issues_to_check_batch)
                 jira_issues_to_check_batch = []
         yield from self._check_jira_issues(jira_issues_to_check_batch)
@@ -148,47 +167,69 @@ class Checker:
                     yield _format_error(ErrorCode.JIR001, todo_detail), None
 
     def _check_jira_issues(self, jira_issues_to_check):
-        if jira_issues_to_check and self.jira_client:
-            existing_issues = self.jira_client.get_issues({detail.jira_issue for detail in jira_issues_to_check})
-            for todo_detail in jira_issues_to_check:
-                try:
-                    status, resolution = existing_issues[todo_detail.jira_issue]
-                except KeyError:
-                    logger.debug("No such issue")
-                    yield _format_error(ErrorCode.JIR002, todo_detail)
-                else:
-                    logger.debug("Found issue with status: %s and resolution: %s", status, resolution)
-                    if status in self.disallowed_jira_statuses:
-                        logger.debug("JIRA status is disallowed")
-                        yield _format_error(ErrorCode.JIR003, todo_detail, f"Status={status}")
-                    elif resolution and (
-                        self.disallow_all_jira_resolutions or resolution in self.disallowed_jira_resolutions
-                    ):
-                        logger.debug("JIRA resolution is disallowed")
-                        yield _format_error(ErrorCode.JIR003, todo_detail, f"Resolution={resolution}")
+        if not self.jira_client or not jira_issues_to_check:
+            return
+
+        existing_issues = self.jira_client.get_issues({detail.jira_issue for detail in jira_issues_to_check})
+        issues_by_valid_jira_issue = collections.defaultdict(list)
+
+        for todo_detail in jira_issues_to_check:
+            try:
+                issue = existing_issues[todo_detail.jira_issue]
+            except KeyError:
+                logger.debug("No such issue")
+                yield _format_error(ErrorCode.JIR002, todo_detail)
+            else:
+                status, resolution = status_and_resolution(issue)
+                logger.debug("Found issue with status: %s and resolution: %s", status, resolution)
+                if status in self.disallowed_jira_statuses:
+                    logger.debug("JIRA status is disallowed")
+                    yield _format_error(ErrorCode.JIR003, todo_detail, f"Status={status}")
+                elif resolution and (
+                    self.disallow_all_jira_resolutions or resolution in self.disallowed_jira_resolutions
+                ):
+                    logger.debug("JIRA resolution is disallowed")
+                    yield _format_error(ErrorCode.JIR003, todo_detail, f"Resolution={resolution}")
+
+                issues_by_valid_jira_issue[todo_detail.jira_issue].append(todo_detail)
+
+        if not self.update_comments and not self.update_comments_dry_run:
+            return
+
+        # TODO need to search for all the comments otherwise you'll miss deletions
+        for jira_issue, todo_details in issues_by_valid_jira_issue.items():
+            message = "There are open TODOs against this JIRA ticket.\n"
+
+            if todo_details:
+                for todo_detail in todo_details:
+                    # In JIRA, monospaced font is denoted like this: {{ Hello }}, but in python you have to escape {
+                    # as {{ in f-strings.
+                    message += f"\n * {self.filename}:{todo_detail.line_number} -- {todo_detail.line.strip()}"
+
+                self.jira_client.fix_comment(jira_issue, message, self.update_comments_dry_run)
+            else:
+                self.jira_client.fix_comment(jira_issue, None, self.update_comments_dry_run)
 
 
 def _format_error(error_code, todo_detail, extra_error_detail=None):
-    with contextlib.closing(io.StringIO()) as error_message:
-        error_message.write(error_code.value)
-        if extra_error_detail:
-            error_message.write(" (")
-            error_message.write(extra_error_detail)
-            error_message.write(")")
-        error_message.write(": ")
-        error_message.write(
-            todo_detail.line.rstrip()[
-                todo_detail.start_of_match : todo_detail.start_of_match + _MAX_ERROR_DETAIL_LENGTH
-            ]
-        )
-        if len(todo_detail.line.rstrip()) > todo_detail.start_of_match + _MAX_ERROR_DETAIL_LENGTH:
-            error_message.write("...")
-        return (
-            todo_detail.line_number,
-            todo_detail.start_of_match,
-            error_message.getvalue(),
-            type(Checker),
-        )
+    error_message = error_code.value
+    if extra_error_detail:
+        error_message += " ("
+        error_message += extra_error_detail
+        error_message += ")"
+    error_message += ": "
+    error_message += todo_detail.line.rstrip()[
+        todo_detail.start_of_match : todo_detail.start_of_match + _MAX_ERROR_DETAIL_LENGTH
+    ]
+
+    if len(todo_detail.line.rstrip()) > todo_detail.start_of_match + _MAX_ERROR_DETAIL_LENGTH:
+        error_message += "..."
+    return (
+        todo_detail.line_number,
+        todo_detail.start_of_match,
+        error_message,
+        type(Checker),
+    )
 
 
 def _construct_todo_pattern(jira_project_ids, allowed_todo_synonyms, disallowed_todo_synonyms):

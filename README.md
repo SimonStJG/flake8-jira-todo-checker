@@ -114,13 +114,33 @@ This project is heavily inspired by the [Softwire TODO checker](https://github.c
 
 GNU General Public License v3 or later (GPLv3+)
 
-# Development Setup
+# Development 
+
+## Setup
 
 1. Install [pyenv](https://github.com/pyenv/pyenv-installer)
 2. Install [poetry](https://python-poetry.org/)
 3. `poetry install`
 
-# Releasing
+## Running a local JIRA instance for testing
+
+Atlassian provides a JIRA image, but it takes an incredibly large amount of time to setup so it's worth using a volume 
+to ensure you don't ever have to do this twice.
+
+```
+docker volume create --name jiraVolume
+docker run -v jiraVolume:/var/atlassian/application-data/jira --name="jira" -d -p 8080:8080 atlassian/jira-software
+```
+
+Choose the "Set it up myself" option.  You can then authenticate with a test project via something like:
+
+```
+jira-cookie-username = admin
+jira-cookie-password = admin
+jira-server = http://localhost:8080
+```
+
+## Releasing
 
 1. `poetry run bump2version minor`
 1. `git push && git push --tags`
