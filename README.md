@@ -1,7 +1,7 @@
 Flake8 JIRA TODO Checker
 ========================
 
-[![CircleCI](https://circleci.com/gh/SimonStJG/flake8-jira-todo-checker/tree/master.svg?style=shield)](https://circleci.com/gh/SimonStJG/flake8-jira-todo-checker/tree/master)
+[![CircleCI](https://circleci.com/gh/SimonStJG/flake8-jira-todo-checker/tree/main.svg?style=shield)](https://circleci.com/gh/SimonStJG/flake8-jira-todo-checker/tree/main)
 [![PyPI](https://img.shields.io/pypi/v/flake8-jira-todo-checker.svg?color=green)](https://pypi.python.org/pypi/flake8-jira-todo-checker)
 [![PyPI](https://img.shields.io/pypi/l/flake8-jira-todo-checker.svg?color=green)](https://pypi.python.org/pypi/flake8-jira-todo-checker)
 [![PyPI](https://img.shields.io/pypi/pyversions/flake8-jira-todo-checker.svg)](https://pypi.python.org/pypi/flake8-jira-todo-checker)
