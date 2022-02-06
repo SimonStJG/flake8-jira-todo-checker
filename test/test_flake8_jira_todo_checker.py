@@ -93,11 +93,20 @@ def mock_jira_client(mocker):
         pytest.param(
             """
             def main():
+                # TODO
+                pass
+            """,
+            ["2:7: JIR001 TODO with missing or malformed JIRA card: TODO"],
+            id="plain todo",
+        ),
+        pytest.param(
+            """
+            def main():
                 # TODO!
                 pass
             """,
             ["2:7: JIR001 TODO with missing or malformed JIRA card: TODO!"],
-            id="plain todo",
+            id="plain todo with punctuation",
         ),
         pytest.param(
             """
@@ -165,7 +174,16 @@ def mock_jira_client(mocker):
                 pass
             """,
             [],
-            id="Banned word as subset of legitimate word",
+            id="Invalid TODO synonym word as subset of legitimate word",
+        ),
+        pytest.param(
+            """
+            def main():
+                # todoc
+                pass
+            """,
+            [],
+            id="Valid TODO synonym as a subset of legitimate word",
         ),
     ],
 )
@@ -175,6 +193,65 @@ def test_todo_recognition(code, expected_errors):
         allowed-todo-synonyms = TODO
         disallowed-todo-synonyms=FIX,FIXME,QQ
         jira-project-ids = ABC
+    """
+    assert set(run_flake8(config, code)) == set(expected_errors)
+
+
+@pytest.mark.parametrize(
+    "code,expected_errors",
+    [
+        pytest.param(
+            """
+        def main():
+            # TODO
+            pass
+        """,
+            ["2:7: JIR001 TODO with missing or malformed JIRA card: TODO"],
+            id="plain todo",
+        ),
+        pytest.param(
+            """
+        def main():
+            # TODO!
+            pass
+        """,
+            ["2:7: JIR001 TODO with missing or malformed JIRA card: TODO!"],
+            id="plain todo with punctuation",
+        ),
+        pytest.param(
+            """
+        def fixture():
+            # Suffix and Fixture are suspicious words
+            pass
+        """,
+            [],
+            id="Invalid TODO synonym word as subset of legitimate word",
+        ),
+        pytest.param(
+            """
+        def main():
+            # todoc
+            pass
+        """,
+            [],
+            id="Valid TODO synonym as a subset of legitimate word",
+        ),
+        pytest.param(
+            """
+        def main():
+            # TODO DEF-123
+            pass
+        """,
+            ["2:7: JIR001 TODO with missing or malformed JIRA card: TODO DEF-123"],
+            id="invalid project id",
+        ),
+    ],
+)
+def test_no_jira_project_ids(code, expected_errors):
+    config = """
+        [flake8]
+        allowed-todo-synonyms = TODO
+        disallowed-todo-synonyms=FIX,FIXME,QQ
     """
     assert set(run_flake8(config, code)) == set(expected_errors)
 
@@ -222,3 +299,27 @@ def test_jira_integration(mock_jira_client, jira_client_output, expected_errors)
     mock_jira_client.get_issues.return_value = jira_client_output
 
     assert set(run_flake8(config, code)) == set(expected_errors)
+
+
+def test_jira_integration_no_jira_project_ids(mock_jira_client):
+    config = """
+        [flake8]
+        allowed-todo-synonyms = TODO
+        disallowed-todo-synonyms=FIX,FIXME,QQ
+        jira-server=http://example.example/
+        jira-cookie-username=test
+        jira-cookie-password=test
+    """
+    code = """
+        def main():
+            # TODO ABC-123
+            pass
+    """
+
+    def raise_runtime_exception():
+        raise RuntimeError()
+
+    # This shouldn't ever be called if there are no valid JIRA project IDs
+    mock_jira_client.get_issues.side_effect = raise_runtime_exception
+
+    assert set(run_flake8(config, code)) == {"2:7: JIR001 TODO with missing or malformed JIRA card: TODO ABC-123"}

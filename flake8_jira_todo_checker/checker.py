@@ -215,4 +215,13 @@ def _construct_todo_pattern(jira_project_ids, allowed_todo_synonyms, disallowed_
             re.VERBOSE | re.IGNORECASE,
         )
     else:
-        return re.compile(rf"({todo_like})", re.VERBOSE | re.IGNORECASE)
+        return re.compile(
+            rf"""
+                [^a-z]                              # Not a character
+                                                    #   (We don't want to match words which end with a todo synonym)
+                ({todo_like})
+                [^a-z]                              # Not a character
+                                                    #   (We don't want to match words which end with a todo synonym)
+            """,
+            re.VERBOSE | re.IGNORECASE,
+        )
