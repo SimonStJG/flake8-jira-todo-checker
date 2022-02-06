@@ -114,6 +114,12 @@ This project is heavily inspired by the [Softwire TODO checker](https://github.c
 
 GNU General Public License v3 or later (GPLv3+)
 
+# Development Setup
+
+1. Install [pyenv](https://github.com/pyenv/pyenv-installer)
+2. Install [poetry](https://python-poetry.org/)
+3. `poetry install`
+
 # Releasing
 
 1. `poetry run bump2version minor`
