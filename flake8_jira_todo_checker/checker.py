@@ -24,6 +24,7 @@ class ErrorCode(str, enum.Enum):
     JIR002 = "JIR002 TODO with invalid JIRA card"
     JIR003 = "JIR003 TODO with JIRA card in invalid state"
     JIR004 = "JIR004 Invalid word used instead of TODO"
+    JIR005 = "JIR005 Bad capitalisation of JIRA ticket ID"
 
 
 class Checker:
@@ -117,24 +118,26 @@ class Checker:
         for line_number, line in enumerate(self.lines, start=1):
             for match in self.todo_pattern.finditer(line):
                 logger.debug("Found match: %s on line %s", match.span(), line)
+
                 try:
-                    jira_issue_raw = match.group(2)
+                    jira_issue = match.group(2)
                 except IndexError:
                     jira_issue = None
                 else:
-                    if jira_issue_raw:
-                        jira_issue = jira_issue_raw.strip().upper()
-                    else:
+                    if not jira_issue:
                         jira_issue = None
 
                 todo_detail = TodoDetail(
                     todo_word=match.group(1),
-                    jira_issue=jira_issue,
+                    jira_issue=jira_issue.strip().upper() if jira_issue else None,
                     line=line,
                     line_number=line_number,
                     start_of_match=match.span(1)[0],
                 )
                 logger.debug("todo_detail: %s", todo_detail)
+
+                if jira_issue and not jira_issue.isupper():
+                    yield _format_error(ErrorCode.JIR005, todo_detail), None
 
                 if todo_detail.todo_word not in self.allowed_todo_synonyms:
                     yield _format_error(ErrorCode.JIR004, todo_detail), None

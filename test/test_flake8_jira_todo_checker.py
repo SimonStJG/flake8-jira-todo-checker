@@ -185,6 +185,15 @@ def mock_jira_client(mocker):
             [],
             id="Valid TODO synonym as a subset of legitimate word",
         ),
+        pytest.param(
+            """
+            def main():
+                # TODO AbC-1
+                pass
+            """,
+            ["2:7: JIR005 Bad capitalisation of JIRA ticket ID: TODO AbC-1"],
+            id="Valid TODO with bad capitalisation",
+        ),
     ],
 )
 def test_todo_recognition(code, expected_errors):
@@ -299,6 +308,29 @@ def test_jira_integration(mock_jira_client, jira_client_output, expected_errors)
     mock_jira_client.get_issues.return_value = jira_client_output
 
     assert set(run_flake8(config, code)) == set(expected_errors)
+
+
+def test_jira_integration_with_bad_todo_capitalisation(mock_jira_client):
+    mock_jira_client.get_issues.return_value = {"ABC-123": ("Done", None)}
+    config = """
+        [flake8]
+        allowed-todo-synonyms = TODO
+        disallowed-todo-synonyms=FIX,FIXME,QQ
+        jira-project-ids = ABC
+        jira-server=http://example.example/
+        jira-cookie-username=test
+        jira-cookie-password=test
+    """
+    code = """
+        def main():
+            # TODO abc-123
+            pass
+    """
+
+    assert set(run_flake8(config, code)) == {
+        "2:7: JIR003 TODO with JIRA card in invalid state (Status=Done): TODO abc-123",
+        "2:7: JIR005 Bad capitalisation of JIRA ticket ID: TODO abc-123",
+    }
 
 
 def test_jira_integration_no_jira_project_ids(mock_jira_client):
